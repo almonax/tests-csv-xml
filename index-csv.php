@@ -1,40 +1,65 @@
 <?php
-// Require CSV class
-require_once 'CSV.php';
+include '_header.php';
+require '_helpers.php';
 
-// Create CSV class
-$csv = new CSV('csv.csv');
-// Get all data
-$csvContent = $csv->get();
+$newData = require '_newData.php';
+$csvFile = fopen('csv.csv', 'r');
+$newCsvFile = fopen('new-csv.csv', 'w');
 
-// Set data into new file
-$csv->setFile('new-csv.csv');
-$csv->set($csvContent);
+/**
+ * Update date and write new csv file
+ */
+$tables = [
+    'csv' => '',
+    'new-csv' => ''
+];
+$tableHeader = [];
+$isNewTable = true;
+$endTable = '</tbody></table>';
+while (($line = fgetcsv($csvFile, 0, ';')) !== false) {
+    if ($isNewTable) {
+        $tableHeader = $line;
+        $startTable = '<table class="table">' . tag('thead', createTableRow($line, 'th')) . '<tbody>';
+        $tables['csv'] .= $startTable;
+        $tables['new-csv'] .= $startTable;
+        $isNewTable = false;
+    } elseif (current($line) === null) {
+        $tables['csv'] .= $endTable;
+        $tables['new-csv'] .= $endTable;
+        $isNewTable = true;
+    } else {
+        $tables['csv'] .= createTableRow($line);
+        for ($i = 0; $i < count($line); $i++) {
+            $line[$i] = updateParams(
+                    $newData,
+                    $tableHeader[$i],
+                    $line[$i],
+                    $line[(int) array_search('NAME', $tableHeader)]
+                );
+        }
+        $tables['new-csv'] .= createTableRow($line);
+    }
 
-// change mode
-$csv->setMode(CSV::MODE_LINE);
-$csvContent = [];
-
-// Get data on one line
-while (($getLine = $csv->get()) !== false) {
-    $csvContent[] = $getLine;
+    fputcsv($newCsvFile, $line, ';');
 }
+$tables['csv'] .= $endTable;
+$tables['new-csv'] .= $endTable;
 
-// Set data on one line
-$csv->setFile('new-csv-1.csv');
-foreach ($csvContent as $item) {
-    $csv->set($item);
-}
+fclose($csvFile);
+fclose($newCsvFile);
+?>
 
-?><!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Test CSV</title>
-</head>
-<body>
+<div class="row">
+    <h2>Data from <code>csv.csv</code> file</h2>
+    <?= $tables['csv'] ?>
+</div>
 
-    <pre><?php var_dump($csvContent); ?></pre>
+<div class="row">
+    <h2>Data from <code>new-csv.csv</code> file</h2>
+    <?= $tables['new-csv'] ?>
+</div>
+<?php
+include '_footer.php';
 
-</body>
-</html>
+// Записать CSV с сегодняшней датой и обновленными и курсами валют
+// Вывести в удобочитаемом виде

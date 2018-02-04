@@ -1,108 +1,120 @@
 <?php
+include '_header.php';
+require '_helpers.php';
+?>
 
+<h2>Reading XML with SimpleXMLElement</h2>
+
+<?php
 /**
  * Reading XML with SimpleXMLElement
  */
-
 $xmlFile = file_get_contents('xml.xml');
-
 $simpleXml = new SimpleXMLElement($xmlFile);
 
-echo "<pre>";
+?>
 
-$i = 0;
-while ($i < count($simpleXml->CURRENCY)) {
-    echo "\nCURRENCY[$i]";
+<ul>
+    <li>Last update <?= $simpleXml->LAST_UPDATE ?></li>
+    <li>Currencies
+        <ul>
+            <?php foreach ($simpleXml->CURRENCY as $currency): ?>
+            <li><?= $currency->NAME ?>
+                <ul>
+                    <li>Unit:           <?= $currency->UNIT ?></li>
+                    <li>Country:        <?= $currency->COUNTRY ?></li>
+                    <li>Currency code:  <?= $currency->CURRENCYCODE ?></li>
+                    <li>Rate:           <?= $currency->RATE ?></li>
+                    <li>Change:         <?= $currency->CHANGE ?></li>
+                </ul>
+            </li>
+            <?php endforeach; ?>
+        </ul>
+    </li>
+</ul>
 
-    echo "\n\t NAME:" . $simpleXml->CURRENCY[$i]->NAME;
-    echo "\n\t UNIT:" . $simpleXml->CURRENCY[$i]->UNIT;
-    echo "\n\t COUNTRY:" . $simpleXml->CURRENCY[$i]->COUNTRY;
-    echo "\n\t CURRENCYCODE:" . $simpleXml->CURRENCY[$i]->CURRENCYCODE;
-    echo "\n\t RATE:" . $simpleXml->CURRENCY[$i]->RATE;
-    echo "\n\t CHANGE:" . $simpleXml->CURRENCY[$i]->CHANGE;
-    echo "\n";
+<h2>Write XML with XMLWriter and reading with XMLReader</h2>
 
-    $i++;
-}
-
-echo "</pre>";
-
-
+<?php
 /**
- * Writing XML with XMLWriter
+ * Write XML with XMLWriter and reading with XMLReader
  */
 
+$newData = require '_newData.php';
 $xmlFile = 'new-xml.xml';
+
+$xmlReader = new XMLReader();
+$xmlReader->open('xml.xml');
 
 $xmlWriter = new XMLWriter();
 $xmlWriter->openMemory();
 $xmlWriter->startDocument('1.0', 'UTF-8');
-$xmlWriter->startElement('CURRENCIES');
-$xmlWriter->writeElement('LAST_UPDATE', date('Y-m-d'));
 
-foreach ($simpleXml->CURRENCY as $item) {
-    $xmlWriter->startElement('CURRENCY');
+$element = '';
+$currencyName = '';
+$content = '';
+$isTreeOpened = false;
+while ($xmlReader->read()) {
+    switch ($xmlReader->nodeType) {
+        case XMLReader::ELEMENT:
+            $element = $xmlReader->name;
+            $xmlWriter->startElement($xmlReader->name);
+            break;
+        case XMLReader::END_ELEMENT:
 
-    $xmlWriter->writeElement('NAME', $item->NAME);
-    $xmlWriter->writeElement('UNIT', $item->UNIT);
-    $xmlWriter->writeElement('COUNTRY', $item->COUNTRY);
-    $xmlWriter->writeElement('CURRENCYCODE', $item->CURRENCYCODE);
-    $xmlWriter->writeElement('RATE', $item->RATE);
-    $xmlWriter->writeElement('CHANGE', $item->CHANGE);
+            // print block
+            if ($element === 'LAST_UPDATE') {
+                $content .= '<li>Currencies<ul>';
+            } elseif ($element === 'CURRENCY') {
+                $content .= '</ul>';
+            }
+            // end print
 
-    $xmlWriter->endElement();
+            $element = '';
+            $xmlWriter->endElement();
+
+            break;
+        case XMLReader::TEXT:
+            $value = $xmlReader->value;
+            if ($element === 'NAME') {
+                $currencyName = $xmlReader->value;
+            } else {
+                $value = updateParams(
+                        $newData,
+                        $element,
+                        $value,
+                        $currencyName
+                );
+            }
+            $xmlWriter->writeRaw($value);
+
+            // print block
+            $elemCopy = $element;
+            if ($element === 'NAME') {
+                if ($isTreeOpened) {
+                    $content .= '</ul></li>';
+                }
+                $content .= "<li>$value<ul>";
+                $isTreeOpened = true;
+            } else {
+                if ($element === 'CURRENCYCODE') {
+                    $elemCopy = str_replace('CODE', ' CODE', $elemCopy);
+                }
+                $content .= tag('li', ucfirst(strtolower(str_replace('_', ' ', $elemCopy))) . ': ' . $value);
+            }
+            // end print
+
+            break;
+    }
 }
-$xmlWriter->endDocument();
-$writeToFile = fopen($xmlFile, 'w');
-fwrite($writeToFile, $xmlWriter->outputMemory());
-fclose($writeToFile);
 
-echo '<hr>';
-
-
-/**
- * Reading XML with XMLReader
- */
-
-$xmlReader = new XMLReader();
-$xmlReader->open($xmlFile);
-
-echo '<pre>';
-
-while ($xmlReader->read() && $xmlReader->name !== 'LAST_UPDATE');
-$node = new SimpleXMLElement($xmlReader->readOuterXml());
-var_dump($node);
-
-echo '<hr>';
-
-while($xmlReader->read() && $xmlReader->name !== 'CURRENCY');
-
-while($xmlReader->name === 'CURRENCY')
-{
-    $node = new SimpleXMLElement($xmlReader->readOuterXML());
-    var_dump($node);
-    echo '<hr>';
-
-    $xmlReader->next('CURRENCY');
-}
 $xmlReader->close();
-echo '</pre>';
-
+$xmlWriter->endDocument();
+file_put_contents($xmlFile, $xmlWriter->outputMemory());
 
 /**
- * Writing XML with SimpleXMLElement
+ * Print update result
  */
+echo tag('ul', $content);
 
-$simpleXml = new SimpleXMLElement(file_get_contents($xmlFile));
-$newNode = $simpleXml->addChild('CURRENCY');
-
-$newNode->addChild('NAME', 'Yuán');
-$newNode->addChild('UNIT', '1');
-$newNode->addChild('COUNTRY', 'China');
-$newNode->addChild('CURRENCYCODE', 'CNY');
-$newNode->addChild('RATE', '41.22');
-$newNode->addChild('CHANGE', '1.14');
-
-$writeToFile = fopen('new-xml-1.xml', 'w');
-fwrite($writeToFile,  $simpleXml->asXML());
-fclose($writeToFile);
+include '_footer.php';
